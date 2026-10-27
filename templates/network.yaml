@@ -8,12 +8,30 @@ Description: >-
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
-      - Label: { default: Naming and tagging }
-        Parameters: [ProjectName, Environment, OwnerName, CostCenter, LabName]
-      - Label: { default: Network }
-        Parameters: [VpcCidr, PublicSubnetACidr, PublicSubnetBCidr, WebSubnetACidr, WebSubnetBCidr, AppSubnetACidr, AppSubnetBCidr]
-      - Label: { default: Compute }
-        Parameters: [InstanceType, LatestAmiId, AppPort]
+      - Label:
+          default: Naming and tagging
+        Parameters:
+          - ProjectName
+          - Environment
+          - OwnerName
+          - CostCenter
+          - LabName
+      - Label:
+          default: Network
+        Parameters:
+          - VpcCidr
+          - PublicSubnetACidr
+          - PublicSubnetBCidr
+          - WebSubnetACidr
+          - WebSubnetBCidr
+          - AppSubnetACidr
+          - AppSubnetBCidr
+      - Label:
+          default: Compute
+        Parameters:
+          - InstanceType
+          - LatestAmiId
+          - AppPort
 
 Parameters:
   ProjectName:
@@ -24,7 +42,10 @@ Parameters:
   Environment:
     Type: String
     Default: dev
-    AllowedValues: [dev, test, prod]
+    AllowedValues:
+      - dev
+      - test
+      - prod
   OwnerName:
     Type: String
     MinLength: 1
@@ -59,7 +80,9 @@ Parameters:
   InstanceType:
     Type: String
     Default: t3.micro
-    AllowedValues: [t2.micro, t3.micro]
+    AllowedValues:
+      - t2.micro
+      - t3.micro
     Description: Free Tier eligible instance types only.
   LatestAmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
@@ -79,21 +102,31 @@ Resources:
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-vpc" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-vpc"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-igw" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-igw"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   InternetGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -107,86 +140,134 @@ Resources:
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: !Ref PublicSubnetACidr
-      AvailabilityZone: !Select [0, !GetAZs ""]
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ""
       MapPublicIpOnLaunch: false
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-public-a" }
-        - { Key: Tier, Value: public }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-public-a"
+        - Key: Tier
+          Value: public
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   PublicSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: !Ref PublicSubnetBCidr
-      AvailabilityZone: !Select [1, !GetAZs ""]
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ""
       MapPublicIpOnLaunch: false
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-public-b" }
-        - { Key: Tier, Value: public }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-public-b"
+        - Key: Tier
+          Value: public
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   WebSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: !Ref WebSubnetACidr
-      AvailabilityZone: !Select [0, !GetAZs ""]
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ""
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-web-a" }
-        - { Key: Tier, Value: web }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-web-a"
+        - Key: Tier
+          Value: web
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   WebSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: !Ref WebSubnetBCidr
-      AvailabilityZone: !Select [1, !GetAZs ""]
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ""
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-web-b" }
-        - { Key: Tier, Value: web }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-web-b"
+        - Key: Tier
+          Value: web
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   AppSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: !Ref AppSubnetACidr
-      AvailabilityZone: !Select [0, !GetAZs ""]
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ""
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-app-a" }
-        - { Key: Tier, Value: app }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-app-a"
+        - Key: Tier
+          Value: app
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   AppSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: !Ref AppSubnetBCidr
-      AvailabilityZone: !Select [1, !GetAZs ""]
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ""
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-app-b" }
-        - { Key: Tier, Value: app }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-app-b"
+        - Key: Tier
+          Value: app
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   # ---------------------------------------------------------------- Public routing
   PublicRouteTable:
@@ -194,11 +275,16 @@ Resources:
     Properties:
       VpcId: !Ref Vpc
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-public-rt" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-public-rt"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   PublicDefaultRoute:
     Type: AWS::EC2::Route
@@ -227,11 +313,16 @@ Resources:
     Properties:
       Domain: vpc
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-nat-eip-a" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-nat-eip-a"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   NatEipB:
     Type: AWS::EC2::EIP
@@ -239,11 +330,16 @@ Resources:
     Properties:
       Domain: vpc
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-nat-eip-b" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-nat-eip-b"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   NatGatewayA:
     Type: AWS::EC2::NatGateway
@@ -251,11 +347,16 @@ Resources:
       AllocationId: !GetAtt NatEipA.AllocationId
       SubnetId: !Ref PublicSubnetA
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-nat-a" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-nat-a"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   NatGatewayB:
     Type: AWS::EC2::NatGateway
@@ -263,11 +364,16 @@ Resources:
       AllocationId: !GetAtt NatEipB.AllocationId
       SubnetId: !Ref PublicSubnetB
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-nat-b" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-nat-b"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   # ---------------------------------------------------------------- Private routing (per AZ)
   PrivateRouteTableA:
@@ -275,22 +381,32 @@ Resources:
     Properties:
       VpcId: !Ref Vpc
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-private-rt-a" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-private-rt-a"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   PrivateRouteTableB:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref Vpc
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-private-rt-b" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-private-rt-b"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   PrivateDefaultRouteA:
     Type: AWS::EC2::Route
@@ -351,14 +467,27 @@ Resources:
       GroupDescription: Front-end servers - HTTP from the ALB only, no SSH
       VpcId: !Ref Vpc
       SecurityGroupEgress:
-        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: HTTPS for updates and SSM }
-        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: HTTP for package mirrors }
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS for updates and SSM
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP for package mirrors
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-web-sg" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-web-sg"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   AlbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -367,7 +496,11 @@ Resources:
       GroupDescription: Public ALB - HTTP from the internet, forwards to front-end servers only
       VpcId: !Ref Vpc
       SecurityGroupIngress:
-        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: HTTP from the internet }
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP from the internet
       SecurityGroupEgress:
         - IpProtocol: tcp
           FromPort: 80
@@ -375,11 +508,16 @@ Resources:
           DestinationSecurityGroupId: !Ref WebSecurityGroup
           Description: HTTP to front-end servers
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-alb-sg" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-alb-sg"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   WebIngressFromAlb:
     Type: AWS::EC2::SecurityGroupIngress
@@ -404,14 +542,27 @@ Resources:
           SourceSecurityGroupId: !Ref WebSecurityGroup
           Description: Order API from front-end servers only
       SecurityGroupEgress:
-        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: HTTPS for updates and SSM }
-        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: HTTP for package mirrors }
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS for updates and SSM
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: HTTP for package mirrors
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-app-sg" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-app-sg"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   WebEgressToApp:
     Type: AWS::EC2::SecurityGroupEgress
@@ -433,22 +584,29 @@ Resources:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
-            Principal: { Service: ec2.amazonaws.com }
+            Principal:
+              Service: ec2.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - !Sub "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-ec2-ssm-role" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-ec2-ssm-role"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
       InstanceProfileName: !Sub "${ProjectName}-${Environment}-ec2-ssm-profile"
-      Roles: [!Ref InstanceRole]
+      Roles:
+        - !Ref InstanceRole
 
   # ---------------------------------------------------------------- Front end (ALB + ASG)
   ApplicationLoadBalancer:
@@ -458,14 +616,22 @@ Resources:
       Name: !Sub "${ProjectName}-${Environment}-alb"
       Type: application
       Scheme: internet-facing
-      Subnets: [!Ref PublicSubnetA, !Ref PublicSubnetB]
-      SecurityGroups: [!Ref AlbSecurityGroup]
+      Subnets:
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+      SecurityGroups:
+        - !Ref AlbSecurityGroup
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-alb" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-alb"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   WebTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -481,13 +647,19 @@ Resources:
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 2
       TargetGroupAttributes:
-        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
+        - Key: deregistration_delay.timeout_seconds
+          Value: "30"
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-web-tg" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-web-tg"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   HttpListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -506,17 +678,26 @@ Resources:
       LaunchTemplateData:
         ImageId: !Ref LatestAmiId
         InstanceType: !Ref InstanceType
-        IamInstanceProfile: { Arn: !GetAtt InstanceProfile.Arn }
-        SecurityGroupIds: [!Ref WebSecurityGroup]
-        MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled }
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        SecurityGroupIds:
+          - !Ref WebSecurityGroup
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
         TagSpecifications:
           - ResourceType: volume
             Tags:
-              - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-web-volume" }
-              - { Key: Project, Value: !Ref ProjectName }
-              - { Key: Environment, Value: !Ref Environment }
-              - { Key: Owner, Value: !Ref OwnerName }
-              - { Key: CostCenter, Value: !Ref CostCenter }
+              - Key: Name
+                Value: !Sub "${ProjectName}-${Environment}-web-volume"
+              - Key: Project
+                Value: !Ref ProjectName
+              - Key: Environment
+                Value: !Ref Environment
+              - Key: Owner
+                Value: !Ref OwnerName
+              - Key: CostCenter
+                Value: !Ref CostCenter
         UserData:
           Fn::Base64: !Sub |
             #!/bin/bash
@@ -543,10 +724,15 @@ Resources:
   WebAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     # Instances install httpd at boot, so their NAT route must exist first.
-    DependsOn: [PrivateDefaultRouteA, PrivateDefaultRouteB, S3GatewayEndpoint]
+    DependsOn:
+      - PrivateDefaultRouteA
+      - PrivateDefaultRouteB
+      - S3GatewayEndpoint
     Properties:
       AutoScalingGroupName: !Sub "${ProjectName}-${Environment}-web-asg"
-      VPCZoneIdentifier: [!Ref WebSubnetA, !Ref WebSubnetB]
+      VPCZoneIdentifier:
+        - !Ref WebSubnetA
+        - !Ref WebSubnetB
       LaunchTemplate:
         LaunchTemplateId: !Ref WebLaunchTemplate
         Version: !GetAtt WebLaunchTemplate.LatestVersionNumber
@@ -555,14 +741,27 @@ Resources:
       DesiredCapacity: "2"
       HealthCheckType: ELB
       HealthCheckGracePeriod: 180
-      TargetGroupARNs: [!Ref WebTargetGroup]
+      TargetGroupARNs:
+        - !Ref WebTargetGroup
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-web", PropagateAtLaunch: true }
-        - { Key: Tier, Value: web, PropagateAtLaunch: true }
-        - { Key: Project, Value: !Ref ProjectName, PropagateAtLaunch: true }
-        - { Key: Environment, Value: !Ref Environment, PropagateAtLaunch: true }
-        - { Key: Owner, Value: !Ref OwnerName, PropagateAtLaunch: true }
-        - { Key: CostCenter, Value: !Ref CostCenter, PropagateAtLaunch: true }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-web"
+          PropagateAtLaunch: true
+        - Key: Tier
+          Value: web
+          PropagateAtLaunch: true
+        - Key: Project
+          Value: !Ref ProjectName
+          PropagateAtLaunch: true
+        - Key: Environment
+          Value: !Ref Environment
+          PropagateAtLaunch: true
+        - Key: Owner
+          Value: !Ref OwnerName
+          PropagateAtLaunch: true
+        - Key: CostCenter
+          Value: !Ref CostCenter
+          PropagateAtLaunch: true
 
   WebCpuScalingPolicy:
     Type: AWS::AutoScaling::ScalingPolicy
@@ -582,17 +781,26 @@ Resources:
       LaunchTemplateData:
         ImageId: !Ref LatestAmiId
         InstanceType: !Ref InstanceType
-        IamInstanceProfile: { Arn: !GetAtt InstanceProfile.Arn }
-        SecurityGroupIds: [!Ref AppSecurityGroup]
-        MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled }
+        IamInstanceProfile:
+          Arn: !GetAtt InstanceProfile.Arn
+        SecurityGroupIds:
+          - !Ref AppSecurityGroup
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
         TagSpecifications:
           - ResourceType: volume
             Tags:
-              - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-app-volume" }
-              - { Key: Project, Value: !Ref ProjectName }
-              - { Key: Environment, Value: !Ref Environment }
-              - { Key: Owner, Value: !Ref OwnerName }
-              - { Key: CostCenter, Value: !Ref CostCenter }
+              - Key: Name
+                Value: !Sub "${ProjectName}-${Environment}-app-volume"
+              - Key: Project
+                Value: !Ref ProjectName
+              - Key: Environment
+                Value: !Ref Environment
+              - Key: Owner
+                Value: !Ref OwnerName
+              - Key: CostCenter
+                Value: !Ref CostCenter
         UserData:
           Fn::Base64: !Sub |
             #!/bin/bash
@@ -615,35 +823,51 @@ Resources:
 
   OrderServiceInstanceA:
     Type: AWS::EC2::Instance
-    DependsOn: [PrivateDefaultRouteA, S3GatewayEndpoint]
+    DependsOn:
+      - PrivateDefaultRouteA
+      - S3GatewayEndpoint
     Properties:
       SubnetId: !Ref AppSubnetA
       LaunchTemplate:
         LaunchTemplateId: !Ref AppLaunchTemplate
         Version: !GetAtt AppLaunchTemplate.LatestVersionNumber
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-order-svc-a" }
-        - { Key: Tier, Value: app }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-order-svc-a"
+        - Key: Tier
+          Value: app
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   OrderServiceInstanceB:
     Type: AWS::EC2::Instance
-    DependsOn: [PrivateDefaultRouteB, S3GatewayEndpoint]
+    DependsOn:
+      - PrivateDefaultRouteB
+      - S3GatewayEndpoint
     Properties:
       SubnetId: !Ref AppSubnetB
       LaunchTemplate:
         LaunchTemplateId: !Ref AppLaunchTemplate
         Version: !GetAtt AppLaunchTemplate.LatestVersionNumber
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-order-svc-b" }
-        - { Key: Tier, Value: app }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-order-svc-b"
+        - Key: Tier
+          Value: app
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
 Outputs:
   FrontEndUrl:
@@ -651,7 +875,8 @@ Outputs:
     Value: !Sub "http://${ApplicationLoadBalancer.DNSName}"
   VpcId:
     Value: !Ref Vpc
-    Export: { Name: !Sub "${ProjectName}-${Environment}-vpc-id" }
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-vpc-id"
   WebAutoScalingGroupName:
     Value: !Ref WebAutoScalingGroup
   OrderServiceInstanceAId:

@@ -13,7 +13,10 @@ Parameters:
   Environment:
     Type: String
     Default: dev
-    AllowedValues: [dev, test, prod]
+    AllowedValues:
+      - dev
+      - test
+      - prod
     Description: Must match Environment in deployment-file.yaml.
   OwnerName:
     Type: String
@@ -32,11 +35,16 @@ Resources:
       ConnectionName: !Sub "${ProjectName}-${Environment}-github"
       ProviderType: GitHub
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-github" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-github"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   # ---------------------------------------------------------------- Git sync role
   # Assumed by Git sync to create and execute change sets. It builds nothing itself:
@@ -51,7 +59,8 @@ Resources:
         Statement:
           - Sid: CfnGitSyncTrustPolicy
             Effect: Allow
-            Principal: { Service: cloudformation.sync.codeconnections.amazonaws.com }
+            Principal:
+              Service: cloudformation.sync.codeconnections.amazonaws.com
             Action: sts:AssumeRole
             Condition:
               StringEquals:
@@ -59,17 +68,23 @@ Resources:
               ArnLike:
                 aws:SourceArn: !GetAtt GitHubConnection.ConnectionArn
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-gitsync-role" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-gitsync-role"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   GitSyncPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: !Sub "${ProjectName}-${Environment}-gitsync-policy"
-      Roles: [!Ref GitSyncRole]
+      Roles:
+        - !Ref GitSyncRole
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -89,7 +104,9 @@ Resources:
             Resource: "*"
           - Sid: PolicyForManagedRules
             Effect: Allow
-            Action: [events:PutRule, events:PutTargets]
+            Action:
+              - events:PutRule
+              - events:PutTargets
             Resource: "*"
             Condition:
               StringEquals:
@@ -119,29 +136,38 @@ Resources:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
-            Principal: { Service: cloudformation.amazonaws.com }
+            Principal:
+              Service: cloudformation.amazonaws.com
             Action: sts:AssumeRole
             Condition:
               StringEquals:
                 aws:SourceAccount: !Ref AWS::AccountId
       Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-cfn-execution-role" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-cfn-execution-role"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: !Ref OwnerName
+        - Key: CostCenter
+          Value: !Ref CostCenter
 
   CloudFormationExecutionPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: !Sub "${ProjectName}-${Environment}-cfn-execution-policy"
-      Roles: [!Ref CloudFormationExecutionRole]
+      Roles:
+        - !Ref CloudFormationExecutionRole
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
           - Sid: ReadEc2
             Effect: Allow
-            Action: [ec2:Describe*, ec2:GetLaunchTemplateData]
+            Action:
+              - ec2:Describe*
+              - ec2:GetLaunchTemplateData
             Resource: "*"
           - Sid: BuildNetwork
             Effect: Allow
@@ -208,18 +234,28 @@ Resources:
                 aws:RequestedRegion: !Ref AWS::Region
           - Sid: TargetTrackingAlarms
             Effect: Allow
-            Action: [cloudwatch:PutMetricAlarm, cloudwatch:DeleteAlarms, cloudwatch:DescribeAlarms]
+            Action:
+              - cloudwatch:PutMetricAlarm
+              - cloudwatch:DeleteAlarms
+              - cloudwatch:DescribeAlarms
             Resource: "*"
             Condition:
               StringEquals:
                 aws:RequestedRegion: !Ref AWS::Region
           - Sid: ResolveAmazonLinuxAmi
             Effect: Allow
-            Action: [ssm:GetParameter, ssm:GetParameters]
+            Action:
+              - ssm:GetParameter
+              - ssm:GetParameters
             Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}::parameter/aws/service/ami-amazon-linux-latest/*"
           - Sid: ReadIam
             Effect: Allow
-            Action: [iam:GetRole, iam:GetInstanceProfile, iam:ListAttachedRolePolicies, iam:ListRolePolicies, iam:ListInstanceProfilesForRole]
+            Action:
+              - iam:GetRole
+              - iam:GetInstanceProfile
+              - iam:ListAttachedRolePolicies
+              - iam:ListRolePolicies
+              - iam:ListInstanceProfilesForRole
             Resource: "*"
           - Sid: ManageInstanceRoleOnly
             Effect: Allow
@@ -241,7 +277,9 @@ Resources:
               - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/${ProjectName}-${Environment}-ec2-*"
           - Sid: AttachOnlySsmCorePolicy
             Effect: Allow
-            Action: [iam:AttachRolePolicy, iam:DetachRolePolicy]
+            Action:
+              - iam:AttachRolePolicy
+              - iam:DetachRolePolicy
             Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-${Environment}-ec2-*"
             Condition:
               ArnEquals:
