@@ -2,3 +2,5 @@
 .DS_Store
 *.docx
 ~$*
+docs/Discovery Report Template*.pdf
+docs/diagram-export-*.png
