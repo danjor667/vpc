@@ -1,6 +1,7 @@
 # CloudFormation Git sync deployment file.
 # Git sync watches this file and templates/network.yaml on the tracked branch;
 # every push that changes either one updates the stack.
+# Stack: onward-orders-dev-network (eu-central-1)
 template-file-path: templates/network.yaml
 
 parameters:
