@@ -1,0 +1,665 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Onward Logistics order system - secure, highly available multi-AZ network.
+  Internet-facing ALB in public subnets, front-end Auto Scaling Group in private
+  web subnets, order services in private app subnets, one NAT Gateway per AZ,
+  S3 gateway endpoint, and SSM Session Manager access (no SSH, no key pairs).
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: Naming and tagging }
+        Parameters: [ProjectName, Environment, OwnerName, CostCenter, LabName]
+      - Label: { default: Network }
+        Parameters: [VpcCidr, PublicSubnetACidr, PublicSubnetBCidr, WebSubnetACidr, WebSubnetBCidr, AppSubnetACidr, AppSubnetBCidr]
+      - Label: { default: Compute }
+        Parameters: [InstanceType, LatestAmiId, AppPort]
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: onward-orders
+    AllowedPattern: "^[a-z0-9-]+$"
+    Description: Lower-case project prefix used in every resource name.
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, test, prod]
+  OwnerName:
+    Type: String
+    MinLength: 1
+    Description: Your full name. Shown on the front-end page and used for the Owner tag.
+  CostCenter:
+    Type: String
+    Default: logistics
+  LabName:
+    Type: String
+    Default: Designing a Secure Network for Onward Logistics Order System
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+  PublicSubnetACidr:
+    Type: String
+    Default: 10.0.0.0/24
+  PublicSubnetBCidr:
+    Type: String
+    Default: 10.0.1.0/24
+  WebSubnetACidr:
+    Type: String
+    Default: 10.0.10.0/24
+  WebSubnetBCidr:
+    Type: String
+    Default: 10.0.11.0/24
+  AppSubnetACidr:
+    Type: String
+    Default: 10.0.20.0/24
+  AppSubnetBCidr:
+    Type: String
+    Default: 10.0.21.0/24
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues: [t2.micro, t3.micro]
+    Description: Free Tier eligible instance types only.
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Latest Amazon Linux 2023 AMI, resolved from the public SSM parameter.
+  AppPort:
+    Type: Number
+    Default: 8080
+    Description: Port the internal order services listen on (front end -> order services only).
+
+Resources:
+  # ---------------------------------------------------------------- VPC
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-vpc" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-igw" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  # ---------------------------------------------------------------- Subnets
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnetACidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-public-a" }
+        - { Key: Tier, Value: public }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnetBCidr
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-public-b" }
+        - { Key: Tier, Value: public }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  WebSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref WebSubnetACidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-web-a" }
+        - { Key: Tier, Value: web }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  WebSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref WebSubnetBCidr
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-web-b" }
+        - { Key: Tier, Value: web }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  AppSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref AppSubnetACidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-app-a" }
+        - { Key: Tier, Value: app }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  AppSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref AppSubnetBCidr
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-app-b" }
+        - { Key: Tier, Value: app }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  # ---------------------------------------------------------------- Public routing
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-public-rt" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  # ---------------------------------------------------------------- NAT (one per AZ for HA)
+  NatEipA:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-nat-eip-a" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  NatEipB:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-nat-eip-b" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  NatGatewayA:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEipA.AllocationId
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-nat-a" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  NatGatewayB:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEipB.AllocationId
+      SubnetId: !Ref PublicSubnetB
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-nat-b" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  # ---------------------------------------------------------------- Private routing (per AZ)
+  PrivateRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-private-rt-a" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  PrivateRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-private-rt-b" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  PrivateDefaultRouteA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableA
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayA
+
+  PrivateDefaultRouteB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTableB
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayB
+
+  WebSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref WebSubnetA
+      RouteTableId: !Ref PrivateRouteTableA
+
+  AppSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref AppSubnetA
+      RouteTableId: !Ref PrivateRouteTableA
+
+  WebSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref WebSubnetB
+      RouteTableId: !Ref PrivateRouteTableB
+
+  AppSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref AppSubnetB
+      RouteTableId: !Ref PrivateRouteTableB
+
+  # Free gateway endpoint: Amazon Linux 2023 repos are served from S3, so package
+  # downloads stay on the AWS network and avoid NAT data-processing charges.
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTableA
+        - !Ref PrivateRouteTableB
+
+  # ---------------------------------------------------------------- Security groups
+  # Declaring SecurityGroupEgress inline removes the default allow-all egress rule.
+  WebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ProjectName}-${Environment}-web-sg"
+      GroupDescription: Front-end servers - HTTP from the ALB only, no SSH
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: HTTPS for updates and SSM }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: HTTP for package mirrors }
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-web-sg" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ProjectName}-${Environment}-alb-sg"
+      GroupDescription: Public ALB - HTTP from the internet, forwards to front-end servers only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: HTTP from the internet }
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          DestinationSecurityGroupId: !Ref WebSecurityGroup
+          Description: HTTP to front-end servers
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-alb-sg" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  WebIngressFromAlb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref WebSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      SourceSecurityGroupId: !Ref AlbSecurityGroup
+      Description: HTTP from the ALB only
+
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ProjectName}-${Environment}-app-sg"
+      GroupDescription: Internal order services - app port from front-end servers only, no SSH
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref AppPort
+          ToPort: !Ref AppPort
+          SourceSecurityGroupId: !Ref WebSecurityGroup
+          Description: Order API from front-end servers only
+      SecurityGroupEgress:
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: HTTPS for updates and SSM }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: HTTP for package mirrors }
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-app-sg" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  WebEgressToApp:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref WebSecurityGroup
+      IpProtocol: tcp
+      FromPort: !Ref AppPort
+      ToPort: !Ref AppPort
+      DestinationSecurityGroupId: !Ref AppSecurityGroup
+      Description: Order API calls to internal order services
+
+  # ---------------------------------------------------------------- IAM (managed policies only)
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-ec2-ssm-role"
+      Description: Lets EC2 instances register with SSM for Session Manager access
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-ec2-ssm-role" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${ProjectName}-${Environment}-ec2-ssm-profile"
+      Roles: [!Ref InstanceRole]
+
+  # ---------------------------------------------------------------- Front end (ALB + ASG)
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn: PublicDefaultRoute
+    Properties:
+      Name: !Sub "${ProjectName}-${Environment}-alb"
+      Type: application
+      Scheme: internet-facing
+      Subnets: [!Ref PublicSubnetA, !Ref PublicSubnetB]
+      SecurityGroups: [!Ref AlbSecurityGroup]
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-alb" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  WebTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${ProjectName}-${Environment}-web-tg"
+      VpcId: !Ref Vpc
+      Protocol: HTTP
+      Port: 80
+      TargetType: instance
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /
+      HealthCheckIntervalSeconds: 15
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      TargetGroupAttributes:
+        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-web-tg" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref WebTargetGroup
+
+  WebLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "${ProjectName}-${Environment}-web-lt"
+      LaunchTemplateData:
+        ImageId: !Ref LatestAmiId
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile: { Arn: !GetAtt InstanceProfile.Arn }
+        SecurityGroupIds: [!Ref WebSecurityGroup]
+        MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled }
+        TagSpecifications:
+          - ResourceType: volume
+            Tags:
+              - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-web-volume" }
+              - { Key: Project, Value: !Ref ProjectName }
+              - { Key: Environment, Value: !Ref Environment }
+              - { Key: Owner, Value: !Ref OwnerName }
+              - { Key: CostCenter, Value: !Ref CostCenter }
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -euxo pipefail
+            dnf install -y httpd
+            TOKEN=$(curl -sX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+            INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+            AZ=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/availability-zone)
+            cat > /var/www/html/index.html <<HTML
+            <!doctype html>
+            <html lang="en">
+            <head><meta charset="utf-8"><title>${LabName}</title>
+            <style>body{font-family:sans-serif;max-width:640px;margin:4rem auto;padding:0 1rem}</style></head>
+            <body>
+              <h1>${LabName}</h1>
+              <p><strong>Name:</strong> ${OwnerName}</p>
+              <p>Onward Logistics order system - front end</p>
+              <p><small>Served by $INSTANCE_ID in $AZ</small></p>
+            </body>
+            </html>
+            HTML
+            systemctl enable --now httpd
+
+  WebAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    # Instances install httpd at boot, so their NAT route must exist first.
+    DependsOn: [PrivateDefaultRouteA, PrivateDefaultRouteB, S3GatewayEndpoint]
+    Properties:
+      AutoScalingGroupName: !Sub "${ProjectName}-${Environment}-web-asg"
+      VPCZoneIdentifier: [!Ref WebSubnetA, !Ref WebSubnetB]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WebLaunchTemplate
+        Version: !GetAtt WebLaunchTemplate.LatestVersionNumber
+      MinSize: "2"
+      MaxSize: "4"
+      DesiredCapacity: "2"
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 180
+      TargetGroupARNs: [!Ref WebTargetGroup]
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-web", PropagateAtLaunch: true }
+        - { Key: Tier, Value: web, PropagateAtLaunch: true }
+        - { Key: Project, Value: !Ref ProjectName, PropagateAtLaunch: true }
+        - { Key: Environment, Value: !Ref Environment, PropagateAtLaunch: true }
+        - { Key: Owner, Value: !Ref OwnerName, PropagateAtLaunch: true }
+        - { Key: CostCenter, Value: !Ref CostCenter, PropagateAtLaunch: true }
+
+  WebCpuScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref WebAutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 60
+
+  # ---------------------------------------------------------------- Internal order services
+  AppLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub "${ProjectName}-${Environment}-app-lt"
+      LaunchTemplateData:
+        ImageId: !Ref LatestAmiId
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile: { Arn: !GetAtt InstanceProfile.Arn }
+        SecurityGroupIds: [!Ref AppSecurityGroup]
+        MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled }
+        TagSpecifications:
+          - ResourceType: volume
+            Tags:
+              - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-app-volume" }
+              - { Key: Project, Value: !Ref ProjectName }
+              - { Key: Environment, Value: !Ref Environment }
+              - { Key: Owner, Value: !Ref OwnerName }
+              - { Key: CostCenter, Value: !Ref CostCenter }
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -euxo pipefail
+            mkdir -p /opt/order-service
+            echo '{"service":"order-service","status":"ok","host":"'"$(hostname)"'"}' > /opt/order-service/index.html
+            cat > /etc/systemd/system/order-service.service <<UNIT
+            [Unit]
+            Description=Onward Logistics order service (placeholder)
+            After=network-online.target
+            [Service]
+            User=nobody
+            ExecStart=/usr/bin/python3 -m http.server ${AppPort} --directory /opt/order-service
+            Restart=always
+            [Install]
+            WantedBy=multi-user.target
+            UNIT
+            systemctl daemon-reload
+            systemctl enable --now order-service
+
+  OrderServiceInstanceA:
+    Type: AWS::EC2::Instance
+    DependsOn: [PrivateDefaultRouteA, S3GatewayEndpoint]
+    Properties:
+      SubnetId: !Ref AppSubnetA
+      LaunchTemplate:
+        LaunchTemplateId: !Ref AppLaunchTemplate
+        Version: !GetAtt AppLaunchTemplate.LatestVersionNumber
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-order-svc-a" }
+        - { Key: Tier, Value: app }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  OrderServiceInstanceB:
+    Type: AWS::EC2::Instance
+    DependsOn: [PrivateDefaultRouteB, S3GatewayEndpoint]
+    Properties:
+      SubnetId: !Ref AppSubnetB
+      LaunchTemplate:
+        LaunchTemplateId: !Ref AppLaunchTemplate
+        Version: !GetAtt AppLaunchTemplate.LatestVersionNumber
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-order-svc-b" }
+        - { Key: Tier, Value: app }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+Outputs:
+  FrontEndUrl:
+    Description: Public URL of the order system front end
+    Value: !Sub "http://${ApplicationLoadBalancer.DNSName}"
+  VpcId:
+    Value: !Ref Vpc
+    Export: { Name: !Sub "${ProjectName}-${Environment}-vpc-id" }
+  WebAutoScalingGroupName:
+    Value: !Ref WebAutoScalingGroup
+  OrderServiceInstanceAId:
+    Value: !Ref OrderServiceInstanceA
+  OrderServiceInstanceBId:
+    Value: !Ref OrderServiceInstanceB
+  OrderServiceAPrivateIp:
+    Value: !GetAtt OrderServiceInstanceA.PrivateIp
+  SessionManagerExample:
+    Description: Open a shell on an internal server (no SSH, no keys)
+    Value: !Sub "aws ssm start-session --target ${OrderServiceInstanceA} --region ${AWS::Region}"

@@ -1,0 +1,97 @@
+# Onward Logistics: Secure Order System Network
+
+A highly available, secure AWS network for the Onward Logistics order system. Everything is built with CloudFormation and deployed by **CloudFormation Git sync** from this repository.
+
+Research and design reasoning are in the discovery report: [`docs/discovery.pdf`](docs/discovery.pdf).
+
+## Architecture
+
+![Architecture diagram: internet-facing ALB in two public subnets, front-end Auto Scaling Group and order services in private subnets across two Availability Zones, one NAT Gateway per AZ, S3 gateway endpoint, and Session Manager admin access](docs/architecture.svg)
+
+| Layer | Resources |
+|---|---|
+| Network | VPC `10.0.0.0/16` across **2 AZs**: 2 public, 2 private *web*, 2 private *app* subnets |
+| Internet entry | Internet Gateway → internet-facing **Application Load Balancer** (only public component) |
+| Front end | Auto Scaling Group (min 2, one per AZ) of Amazon Linux 2023 `t3.micro` in private web subnets; page shows owner name and lab name |
+| Order services | 2 Amazon Linux 2023 `t3.micro` instances (one per AZ) in private app subnets, port `8080` open to front-end SG only |
+| Outbound | **One NAT Gateway per AZ** (each AZ routes through its own) + free **S3 gateway endpoint** for package repos |
+| Admin access | **SSM Session Manager**: IAM role with `AmazonSSMManagedInstanceCore`; no key pairs, no port 22 anywhere |
+
+Traffic rules (security groups):
+
+```
+Internet --80--> ALB SG --80--> Web SG --8080--> App SG
+                                Web/App SG --443/80--> internet (via NAT, outbound only)
+```
+
+## Repository layout
+
+```
+docs/discovery.pdf           Discovery report (committed before the build)
+templates/network.yaml       Main stack: VPC, subnets, NAT, ALB, ASG, instances, SGs, IAM
+deployment-file.yaml         Git sync deployment file (template path, parameters, tags)
+bootstrap/gitsync-role.yaml  One-time stack: IAM role Git sync assumes (managed policies only)
+```
+
+## Deploy
+
+Prerequisites: AWS CLI v2, a GitHub repository holding this code, and `OwnerName` set to your full name in `deployment-file.yaml`.
+
+```bash
+export AWS_REGION=eu-central-1   # Frankfurt
+REGION=$AWS_REGION
+NAME="Jordan Nguepi"
+
+# 1. Bootstrap the Git sync IAM role (one time)
+aws cloudformation deploy --region $REGION \
+  --stack-name onward-orders-dev-gitsync-bootstrap \
+  --template-file bootstrap/gitsync-role.yaml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides OwnerName="$NAME"
+ROLE_ARN=$(aws cloudformation describe-stacks --region $REGION \
+  --stack-name onward-orders-dev-gitsync-bootstrap \
+  --query "Stacks[0].Outputs[?OutputKey=='GitSyncRoleArn'].OutputValue" --output text)
+
+# 2. Create the GitHub connection, then approve it once in the console
+#    (Developer Tools > Settings > Connections > Update pending connection).
+#    This OAuth approval is the only console step AWS allows.
+CONN_ARN=$(aws codeconnections create-connection --region $REGION \
+  --provider-type GitHub --connection-name onward-orders-github \
+  --query ConnectionArn --output text)
+
+# 3. Link the repository and create the sync configuration
+LINK_ID=$(aws codeconnections create-repository-link --region $REGION \
+  --connection-arn $CONN_ARN --owner-id <github-user> --repository-name <repo-name> \
+  --query RepositoryLinkInfo.RepositoryLinkId --output text)
+aws codeconnections create-sync-configuration --region $REGION \
+  --branch main --config-file deployment-file.yaml \
+  --repository-link-id $LINK_ID --resource-name onward-orders-dev-network \
+  --role-arn $ROLE_ARN --sync-type CFN_STACK_SYNC
+```
+
+After that, every push to `main` that changes the template or deployment file updates the stack `onward-orders-dev-network`.
+
+## Prove the client checks
+
+```bash
+export AWS_REGION=eu-central-1
+STACK=onward-orders-dev-network
+out() { aws cloudformation describe-stacks --stack-name $STACK \
+  --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+```
+
+| Check | How to demonstrate |
+|---|---|
+| Front end reachable from the internet | `curl $(out FrontEndUrl)`. Refresh and the instance ID/AZ changes as the ALB balances across AZs |
+| Front end survives a failure | Terminate one web instance: `aws ec2 terminate-instances --instance-ids <id>`. The site stays up and the ASG launches a replacement |
+| No inbound from the internet to internal servers | Order service instances have no public IP; `App SG` only allows 8080 from `Web SG`; no SG has port 22 |
+| Internal servers can download a package | `aws ssm start-session --target $(out OrderServiceInstanceAId)` → `sudo dnf install -y tree` |
+| Admin without opening ports | Same Session Manager session, on each of `OrderServiceInstanceAId` / `OrderServiceInstanceBId` |
+| Front end → order service path works | From a web instance session: `curl http://$(out OrderServiceAPrivateIp):8080` |
+| Rebuild from the repository | Delete the stack, then let Git sync recreate it from `main` |
+
+Session Manager from a laptop needs the [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) for the AWS CLI.
+
+## Cost
+
+About **$147–155/month** in eu-central-1 (Frankfurt), mostly the two NAT Gateways. See the reasoning in the discovery report ([`docs/discovery.pdf`](docs/discovery.pdf), "Your chosen approach"). **Delete the stack when you are not using it.** NAT Gateways and the ALB bill by the hour.

@@ -1,0 +1,19 @@
+# CloudFormation Git sync deployment file.
+# Git sync watches this file and templates/network.yaml on the tracked branch;
+# every push that changes either one updates the stack.
+template-file-path: templates/network.yaml
+
+parameters:
+  ProjectName: onward-orders
+  Environment: dev
+  OwnerName: "Jordan Nguepi"
+  CostCenter: logistics
+  InstanceType: t3.micro
+  AppPort: "8080"
+
+tags:
+  Project: onward-orders
+  Environment: dev
+  Owner: "Jordan Nguepi"
+  CostCenter: logistics
+  ManagedBy: cloudformation-gitsync
