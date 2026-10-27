@@ -1,15 +1,20 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  One-time bootstrap for CloudFormation Git sync - the IAM role Git sync assumes
-  to deploy templates/network.yaml. Customer managed policies only (no inline policies).
+  One-time bootstrap for the Onward Logistics secure network. Creates this project's own
+  GitHub connection, the role Git sync assumes, and the scoped role CloudFormation uses to
+  build templates/network.yaml. Deploy once with the AWS CLI (see README). No inline policies.
 
 Parameters:
   ProjectName:
     Type: String
     Default: onward-orders
+    AllowedPattern: "^[a-z0-9-]+$"
+    Description: Must match ProjectName in deployment-file.yaml.
   Environment:
     Type: String
     Default: dev
+    AllowedValues: [dev, test, prod]
+    Description: Must match Environment in deployment-file.yaml.
   OwnerName:
     Type: String
     MinLength: 1
@@ -18,11 +23,53 @@ Parameters:
     Default: logistics
 
 Resources:
-  # Permissions Git sync itself needs to drive the stack (per the AWS Git sync docs).
+  # ---------------------------------------------------------------- GitHub connection
+  # Created PENDING. Approve it once in the console (Developer Tools > Settings >
+  # Connections > Update pending connection); the GitHub OAuth handshake needs a browser.
+  GitHubConnection:
+    Type: AWS::CodeConnections::Connection
+    Properties:
+      ConnectionName: !Sub "${ProjectName}-${Environment}-github"
+      ProviderType: GitHub
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-github" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  # ---------------------------------------------------------------- Git sync role
+  # Assumed by Git sync to create and execute change sets. It builds nothing itself:
+  # it can only pass the execution role below to CloudFormation.
+  GitSyncRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-gitsync-role"
+      Description: Assumed by CloudFormation Git sync for this project's connection only
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CfnGitSyncTrustPolicy
+            Effect: Allow
+            Principal: { Service: cloudformation.sync.codeconnections.amazonaws.com }
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !GetAtt GitHubConnection.ConnectionArn
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-gitsync-role" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
   GitSyncPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: !Sub "${ProjectName}-${Environment}-gitsync-policy"
+      Roles: [!Ref GitSyncRole]
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -51,49 +98,161 @@ Resources:
             Effect: Allow
             Action: events:DescribeRule
             Resource: "*"
+          - Sid: PassOnlyTheExecutionRole
+            Effect: Allow
+            Action: iam:PassRole
+            Resource: !GetAtt CloudFormationExecutionRole.Arn
+            Condition:
+              StringEquals:
+                iam:PassedToService: cloudformation.amazonaws.com
 
-  # Permissions CloudFormation needs to create the resources in templates/network.yaml.
-  StackResourcesPolicy:
+  # ---------------------------------------------------------------- Execution role
+  # Used by CloudFormation to build the network stack. Limited to eu-central-1 for
+  # regional services, and its IAM rights only reach the EC2 instance role, so it
+  # cannot change its own permissions or the Git sync role.
+  CloudFormationExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${Environment}-cfn-execution-role"
+      Description: Service role CloudFormation uses to build the network stack
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudformation.amazonaws.com }
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-cfn-execution-role" }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref OwnerName }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  CloudFormationExecutionPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName: !Sub "${ProjectName}-${Environment}-gitsync-resources-policy"
+      ManagedPolicyName: !Sub "${ProjectName}-${Environment}-cfn-execution-policy"
+      Roles: [!Ref CloudFormationExecutionRole]
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
-          - Sid: NetworkAndCompute
+          - Sid: ReadEc2
+            Effect: Allow
+            Action: [ec2:Describe*, ec2:GetLaunchTemplateData]
+            Resource: "*"
+          - Sid: BuildNetwork
             Effect: Allow
             Action:
-              - ec2:*
+              - ec2:CreateVpc
+              - ec2:DeleteVpc
+              - ec2:ModifyVpcAttribute
+              - ec2:CreateSubnet
+              - ec2:DeleteSubnet
+              - ec2:ModifySubnetAttribute
+              - ec2:CreateInternetGateway
+              - ec2:DeleteInternetGateway
+              - ec2:AttachInternetGateway
+              - ec2:DetachInternetGateway
+              - ec2:CreateRouteTable
+              - ec2:DeleteRouteTable
+              - ec2:CreateRoute
+              - ec2:DeleteRoute
+              - ec2:ReplaceRoute
+              - ec2:AssociateRouteTable
+              - ec2:DisassociateRouteTable
+              - ec2:ReplaceRouteTableAssociation
+              - ec2:AllocateAddress
+              - ec2:ReleaseAddress
+              - ec2:DisassociateAddress
+              - ec2:CreateNatGateway
+              - ec2:DeleteNatGateway
+              - ec2:CreateVpcEndpoint
+              - ec2:DeleteVpcEndpoints
+              - ec2:ModifyVpcEndpoint
+              - ec2:CreateSecurityGroup
+              - ec2:DeleteSecurityGroup
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:AuthorizeSecurityGroupEgress
+              - ec2:RevokeSecurityGroupIngress
+              - ec2:RevokeSecurityGroupEgress
+              - ec2:ModifySecurityGroupRules
+              - ec2:UpdateSecurityGroupRuleDescriptionsIngress
+              - ec2:UpdateSecurityGroupRuleDescriptionsEgress
+              - ec2:CreateLaunchTemplate
+              - ec2:CreateLaunchTemplateVersion
+              - ec2:DeleteLaunchTemplate
+              - ec2:DeleteLaunchTemplateVersions
+              - ec2:ModifyLaunchTemplate
+              - ec2:RunInstances
+              - ec2:TerminateInstances
+              - ec2:StartInstances
+              - ec2:StopInstances
+              - ec2:ModifyInstanceAttribute
+              - ec2:CreateTags
+              - ec2:DeleteTags
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: !Ref AWS::Region
+          - Sid: BuildLoadBalancingAndScaling
+            Effect: Allow
+            Action:
               - elasticloadbalancing:*
               - autoscaling:*
             Resource: "*"
-          - Sid: ResolveAmiParameter
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: !Ref AWS::Region
+          - Sid: TargetTrackingAlarms
+            Effect: Allow
+            Action: [cloudwatch:PutMetricAlarm, cloudwatch:DeleteAlarms, cloudwatch:DescribeAlarms]
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: !Ref AWS::Region
+          - Sid: ResolveAmazonLinuxAmi
             Effect: Allow
             Action: [ssm:GetParameter, ssm:GetParameters]
-            Resource: !Sub "arn:${AWS::Partition}:ssm:*:*:parameter/aws/service/*"
-          - Sid: ProjectIamRoles
+            Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}::parameter/aws/service/ami-amazon-linux-latest/*"
+          - Sid: ReadIam
+            Effect: Allow
+            Action: [iam:GetRole, iam:GetInstanceProfile, iam:ListAttachedRolePolicies, iam:ListRolePolicies, iam:ListInstanceProfilesForRole]
+            Resource: "*"
+          - Sid: ManageInstanceRoleOnly
             Effect: Allow
             Action:
               - iam:CreateRole
               - iam:DeleteRole
-              - iam:GetRole
               - iam:UpdateRole
+              - iam:UpdateAssumeRolePolicy
               - iam:TagRole
               - iam:UntagRole
-              - iam:AttachRolePolicy
-              - iam:DetachRolePolicy
-              - iam:ListAttachedRolePolicies
-              - iam:ListRolePolicies
-              - iam:PassRole
               - iam:CreateInstanceProfile
               - iam:DeleteInstanceProfile
-              - iam:GetInstanceProfile
               - iam:AddRoleToInstanceProfile
               - iam:RemoveRoleFromInstanceProfile
               - iam:TagInstanceProfile
+              - iam:UntagInstanceProfile
             Resource:
-              - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-${Environment}-*"
-              - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/${ProjectName}-${Environment}-*"
+              - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-${Environment}-ec2-*"
+              - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/${ProjectName}-${Environment}-ec2-*"
+          - Sid: AttachOnlySsmCorePolicy
+            Effect: Allow
+            Action: [iam:AttachRolePolicy, iam:DetachRolePolicy]
+            Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-${Environment}-ec2-*"
+            Condition:
+              ArnEquals:
+                iam:PolicyARN: !Sub "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+          - Sid: PassInstanceRoleToEc2Only
+            Effect: Allow
+            Action: iam:PassRole
+            Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-${Environment}-ec2-*"
+            Condition:
+              StringEquals:
+                iam:PassedToService: ec2.amazonaws.com
           - Sid: ServiceLinkedRoles
             Effect: Allow
             Action: iam:CreateServiceLinkedRole
@@ -104,27 +263,13 @@ Resources:
                   - autoscaling.amazonaws.com
                   - elasticloadbalancing.amazonaws.com
 
-  GitSyncRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub "${ProjectName}-${Environment}-gitsync-role"
-      Description: Assumed by CloudFormation Git sync to deploy the network stack
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal: { Service: cloudformation.sync.codeconnections.amazonaws.com }
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - !Ref GitSyncPolicy
-        - !Ref StackResourcesPolicy
-      Tags:
-        - { Key: Name, Value: !Sub "${ProjectName}-${Environment}-gitsync-role" }
-        - { Key: Project, Value: !Ref ProjectName }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: Owner, Value: !Ref OwnerName }
-        - { Key: CostCenter, Value: !Ref CostCenter }
-
 Outputs:
+  ConnectionArn:
+    Description: Approve this connection in the console before creating the Git sync stack.
+    Value: !GetAtt GitHubConnection.ConnectionArn
   GitSyncRoleArn:
+    Description: Choose this role as the Git sync IAM role.
     Value: !GetAtt GitSyncRole.Arn
+  CloudFormationExecutionRoleArn:
+    Description: Choose this role as the stack's CloudFormation service role.
+    Value: !GetAtt CloudFormationExecutionRole.Arn

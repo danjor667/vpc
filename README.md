@@ -30,46 +30,37 @@ Internet --80--> ALB SG --80--> Web SG --8080--> App SG
 docs/discovery.pdf           Discovery report (committed before the build)
 templates/network.yaml       Main stack: VPC, subnets, NAT, ALB, ASG, instances, SGs, IAM
 deployment-file.yaml         Git sync deployment file (template path, parameters, tags)
-bootstrap/gitsync-role.yaml  One-time stack: IAM role Git sync assumes (managed policies only)
+bootstrap/gitsync-role.yaml  One-time stack: GitHub connection, Git sync role, execution role (managed policies only)
 ```
 
 ## Deploy
 
-Prerequisites: AWS CLI v2, a GitHub repository holding this code, and `OwnerName` set to your full name in `deployment-file.yaml`.
+Region: **eu-central-1 (Frankfurt)**. This project has its own GitHub connection and its own roles; it shares nothing with other stacks in the account.
 
-```bash
-export AWS_REGION=eu-central-1   # Frankfurt
-REGION=$AWS_REGION
-NAME="Jordan Nguepi"
-
-# 1. Bootstrap the Git sync IAM role (one time)
-aws cloudformation deploy --region $REGION \
-  --stack-name onward-orders-dev-gitsync-bootstrap \
-  --template-file bootstrap/gitsync-role.yaml \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --parameter-overrides OwnerName="$NAME"
-ROLE_ARN=$(aws cloudformation describe-stacks --region $REGION \
-  --stack-name onward-orders-dev-gitsync-bootstrap \
-  --query "Stacks[0].Outputs[?OutputKey=='GitSyncRoleArn'].OutputValue" --output text)
-
-# 2. Create the GitHub connection, then approve it once in the console
-#    (Developer Tools > Settings > Connections > Update pending connection).
-#    This OAuth approval is the only console step AWS allows.
-CONN_ARN=$(aws codeconnections create-connection --region $REGION \
-  --provider-type GitHub --connection-name onward-orders-github \
-  --query ConnectionArn --output text)
-
-# 3. Link the repository and create the sync configuration
-LINK_ID=$(aws codeconnections create-repository-link --region $REGION \
-  --connection-arn $CONN_ARN --owner-id <github-user> --repository-name <repo-name> \
-  --query RepositoryLinkInfo.RepositoryLinkId --output text)
-aws codeconnections create-sync-configuration --region $REGION \
-  --branch main --config-file deployment-file.yaml \
-  --repository-link-id $LINK_ID --resource-name onward-orders-dev-network \
-  --role-arn $ROLE_ARN --sync-type CFN_STACK_SYNC
-```
+1. **Bootstrap (once).** Creates the GitHub connection `onward-orders-dev-github` (pending), the Git sync role and the CloudFormation execution role:
+   ```bash
+   aws cloudformation deploy --region eu-central-1 \
+     --stack-name onward-orders-dev-gitsync-bootstrap \
+     --template-file bootstrap/gitsync-role.yaml \
+     --capabilities CAPABILITY_NAMED_IAM \
+     --parameter-overrides OwnerName="Jordan Nguepi"
+   aws cloudformation describe-stacks --region eu-central-1 \
+     --stack-name onward-orders-dev-gitsync-bootstrap --query 'Stacks[0].Outputs'
+   ```
+2. **Approve the connection.** In the console (Frankfurt): Developer Tools > Settings > Connections > `onward-orders-dev-github` > **Update pending connection**, and give the GitHub app access to `danjor667/vpc`. The GitHub OAuth handshake is the only step that needs a browser.
+3. **Create the Git sync stack.** In CloudFormation (Frankfurt), choose **Create stack** > **Sync from Git**, and set:
+   - Stack name `onward-orders-dev-network`
+   - Connection `onward-orders-dev-github`, repository `danjor667/vpc`, branch `main`
+   - Deployment file path `deployment-file.yaml`
+   - Git sync IAM role = `GitSyncRoleArn` output
+   - Under stack options, IAM role = `CloudFormationExecutionRoleArn` output
 
 After that, every push to `main` that changes the template or deployment file updates the stack `onward-orders-dev-network`.
+
+| Role | Can do |
+|---|---|
+| `onward-orders-dev-gitsync-role` | Create and run change sets; pass **only** the execution role to CloudFormation. Trusts only this project's connection. |
+| `onward-orders-dev-cfn-execution-role` | Build the VPC, EC2, load balancer and Auto Scaling resources in eu-central-1; manage **only** the `onward-orders-dev-ec2-*` instance role, which may only carry `AmazonSSMManagedInstanceCore`. |
 
 ## Prove the client checks
 
